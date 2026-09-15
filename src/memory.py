@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import tempfile
 import threading
 import time
 import uuid
@@ -139,5 +140,6 @@ def build_memory_store() -> MemoryStore:
     if backend == "dynamodb":
         return DynamoMemoryStore(os.getenv("MEMORY_TABLE", ""))
     if backend == "sqlite":
-        return SqliteMemoryStore(os.getenv("SQLITE_PATH", "/tmp/openclaw.db"))
+        default_path = os.path.join(tempfile.gettempdir(), "openclaw.db")
+        return SqliteMemoryStore(os.getenv("SQLITE_PATH", default_path))
     return InMemoryStore()
