@@ -1,72 +1,115 @@
 # OpenClaw Private AI Assistant
 
-A portfolio project that demonstrates how to design a self-hosted AI assistant with private state, persistent memory, pluggable model providers, messaging integrations, and controlled tool execution.
+A security-focused private AI assistant reference implementation for AWS and local container deployment. The project demonstrates private conversation memory, pluggable model providers, allow-listed tools, approval gates for higher-risk actions, API authentication, audit-friendly behavior, and infrastructure as code.
 
-## What this demonstrates
+This repository is a portfolio implementation. It does not claim that the AWS stack is currently deployed, and it does not bundle or represent an upstream OpenClaw distribution.
 
-- Private AI assistant architecture
-- Self-hosted deployment patterns
-- Persistent memory and conversation state
-- Secure tool execution with least-privilege boundaries
-- Pluggable model-provider integration
-- Secrets management and environment isolation
-- Logging, auditability, and operational controls
+## What this project demonstrates
 
-## Architecture goals
+- Private assistant orchestration with session-scoped memory
+- Local SQLite memory for self-hosted demos
+- DynamoDB-backed memory for AWS deployment
+- Amazon Bedrock model integration with a deterministic local demo mode
+- Allow-listed read-only tools and explicit higher-risk approval gates
+- Secrets Manager-backed bearer-token authorization
+- API Gateway + Lambda deployment pattern
+- Least-privilege IAM separation between authorization and assistant runtime
+- CloudWatch operational logging with configurable retention
+- Docker deployment that runs the included implementation instead of a placeholder image
+- Python unit tests, Bandit scanning, and Terraform validation in GitHub Actions
+- A project dashboard that reports implementation and live CI status
 
-The design focuses on keeping sensitive assistant state under organization control while still allowing the assistant to use external or internal model providers when appropriate.
-
-Core components:
-
-1. User or messaging channel
-2. OpenClaw assistant service
-3. Model-provider interface
-4. Private memory and state store
-5. Tool execution layer
-6. Secrets and configuration store
-7. Logging and monitoring
-
-See `architecture.md` for the detailed design.
-
-## Security principles
-
-- No hardcoded credentials or API keys
-- Environment variables or a secrets manager for sensitive values
-- Least-privilege permissions for every tool
-- Tool allow-listing instead of unrestricted command execution
-- Separation of assistant runtime, memory, and external integrations
-- Audit logging for requests and tool usage
-- Network restrictions around internal resources
-
-## Example project structure
+## Request flow
 
 ```text
-openclaw-private-ai-assistant/
-├── README.md
-├── architecture.md
-├── .env.example
-└── docker-compose.yml
+Client
+  |
+  v
+API Gateway / Local HTTP Server
+  |
+  +--> authentication boundary
+  |
+  v
+Assistant Orchestrator
+  |        |           |
+  |        |           +--> Approved Tool Registry
+  |        +--------------> Private Memory Store
+  +-----------------------> Model Provider
+                               |
+                               +--> Amazon Bedrock (AWS mode)
+                               +--> Deterministic demo provider (local mode)
 ```
 
-## Quick-start concept
+The model is treated as an untrusted reasoning component. Authorization and tool permissions are enforced in application and infrastructure layers rather than delegated to the model.
 
-1. Copy `.env.example` to `.env`.
-2. Add your own provider credentials locally.
-3. Review the security settings before enabling tools.
-4. Start the stack with Docker Compose.
-5. Connect a supported user interface or messaging channel.
-6. Validate memory, model access, logging, and tool restrictions.
+## Repository contents
 
-## Portfolio talking points
+- `src/app.py` — Lambda/API entry point
+- `src/assistant.py` — orchestration, grounding, memory, and approval logic
+- `src/provider.py` — Bedrock and deterministic local model providers
+- `src/memory.py` — SQLite, DynamoDB, and in-memory session stores
+- `src/tools.py` — allow-listed tool registry
+- `src/authorizer.py` — Secrets Manager-backed API authorizer
+- `src/server.py` — local HTTP server
+- `knowledge/` — example approved operational guidance
+- `tests/` — unit tests for orchestration, tools, memory, API, and authorization
+- `terraform/` — AWS infrastructure as code
+- `docs/` — architecture, deployment, and security documentation
+- `dashboard.html` — project dashboard with live GitHub Actions status
+- `.github/workflows/validate.yml` — CI validation
 
-This project is intended to show how I would approach a private AI assistant as a cloud and security architect rather than as an unrestricted chatbot. The design emphasizes controlled execution, private state, secure integrations, and operational visibility.
+## Local quick start
 
-## Future enhancements
+```bash
+cp .env.example .env
+docker compose up --build
+```
 
-- Amazon Bedrock model-provider option
-- AWS Secrets Manager integration
-- DynamoDB or PostgreSQL-backed memory
-- Amazon CloudWatch logging
-- Private VPC deployment
-- SSO and role-based access control
-- Approval gates for higher-risk tools
+The local service listens on `127.0.0.1:8080` by default when run directly, while the container binds the service inside the container and publishes port 8080 through Docker Compose.
+
+Health check:
+
+```bash
+curl http://localhost:8080/health
+```
+
+Chat example:
+
+```bash
+curl -X POST http://localhost:8080/v1/chat \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer change-this-local-token' \
+  -d '{"session_id":"demo-session","message":"How should I handle a production access request?"}'
+```
+
+By default, local mode uses the deterministic provider so the project can be demonstrated without sending prompts to an external model. Set `PROVIDER_MODE=bedrock` and configure AWS credentials only when you intentionally want Bedrock inference.
+
+## AWS deployment
+
+```bash
+cd terraform
+terraform init
+terraform plan
+terraform apply
+```
+
+Terraform creates the API, Lambda functions, DynamoDB memory table, Secrets Manager secret container, IAM roles, and CloudWatch log groups. The secret value is intentionally initialized out of band so it is not written into Terraform state.
+
+See `docs/deployment.md` for the deployment sequence.
+
+## Security model
+
+- No hardcoded cloud credentials or API tokens
+- API token value stays out of Git history and Terraform state
+- Separate IAM roles for API authorization and assistant inference
+- DynamoDB access is limited to the assistant memory table
+- Bedrock permission is limited to the configured model
+- Tools are explicitly allow-listed and read-only in the reference implementation
+- Higher-risk requests return an approval-required response rather than executing an action
+- Prompt content is not written to API Gateway access logs
+- Session identifiers are validated before memory access
+- Local server authentication uses constant-time token comparison
+
+## Portfolio status
+
+The repository is complete as a reproducible portfolio project: source code, tests, CI, Docker, Terraform, documentation, and dashboard are included. Running `terraform apply` creates billable AWS resources and is intentionally left to the operator.
