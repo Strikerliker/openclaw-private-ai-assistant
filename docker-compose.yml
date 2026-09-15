@@ -1,40 +1,27 @@
 services:
   openclaw:
-    # Portfolio placeholder: replace with an approved OpenClaw image before deployment.
-    image: ghcr.io/example/openclaw:latest
-    container_name: openclaw-assistant
+    build:
+      context: .
+    container_name: openclaw-private-assistant
     restart: unless-stopped
     env_file:
       - .env
-    ports:
-      - "${OPENCLAW_PORT:-8080}:8080"
-    depends_on:
-      memory:
-        condition: service_healthy
-    networks:
-      - private-ai
-
-  memory:
-    image: postgres:16-alpine
-    container_name: openclaw-memory
-    restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-openclaw}
-      POSTGRES_USER: ${POSTGRES_USER:-openclaw}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      OPENCLAW_HOST: 0.0.0.0
+      OPENCLAW_PORT: 8080
+      MEMORY_BACKEND: sqlite
+      SQLITE_PATH: /data/openclaw.db
+    ports:
+      - "127.0.0.1:${OPENCLAW_PORT:-8080}:8080"
     volumes:
-      - openclaw-memory:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openclaw} -d ${POSTGRES_DB:-openclaw}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - private-ai
-
-networks:
-  private-ai:
-    driver: bridge
+      - openclaw-memory:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
 volumes:
   openclaw-memory:
